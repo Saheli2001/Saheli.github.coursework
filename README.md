@@ -1,1 +1,3 @@
-HI, I'am Saheli Datta. Mostly interested in statistics related to data analysis, data visualization, data cleaning and prediction using various models.
+The Project focuses upon the prediction of House Price using Least Square Regression Model. The data used here is a secondory dataset collected from github, it is called the Ames Housing Dataset that contains 80 housing features including their price and House ID.
+Various data visualisation techniques, feature engineering and data cleaning methods are used to treat the raw data. Here PCA is implimented for dimension reduction and to remove multicollinearity among the predictors. Here a Least Square Linear Model is used to repredict the House Price and to compare how well the model fits to the given data.
+
