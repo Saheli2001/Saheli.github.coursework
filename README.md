@@ -1,3 +1,8 @@
-The Project focuses upon the prediction of House Price using Least Square Regression Model. The data used here is a secondory dataset collected from github, it is called the Ames Housing Dataset that contains 80 housing features including their price and House ID.
-Various data visualisation techniques, feature engineering and data cleaning methods are used to treat the raw data. Here PCA is implimented for dimension reduction and to remove multicollinearity among the predictors. Here a Least Square Linear Model is used to repredict the House Price and to compare how well the model fits to the given data.
+This repositiry includes files regarding the projects I've done in MSTAT course.
 
+The courses in which projects are done are :
+
+1. Regression Techniques ( Prof. Deepayan Sarkar, Sem 1)
+2. Non Parametric Inference (Prof. Isha Dewan, Sem 2)
+3. Multivariate Analysis (Prof. Swagata Nandi, Sem 2)
+4. Large Sample Statistical Methods (Prof. Soham Sarkar, Sem 2)
