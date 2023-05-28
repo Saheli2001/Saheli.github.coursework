@@ -1,0 +1,965 @@
+---
+title: "House Price Prediction using Linear Regression"
+author: "Saheli Datta"
+date: '06-11-2022'
+output: ioslides_presentation
+css: custom.css
+  
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## <font size="20"> OBJECTIVE </font>
+
+While buying a house, the most important questions a buyer may ask himself are -
+’What is the price of the house?’ and ’With such price, what features I may get?’.
+
+Based on these queries it is relevant to look for the
+features which are affecting the house prices and to observe how the features are
+affecting the prices.
+
+
+Here our primary objective is to build a linear regression model for predicting House Price. 
+
+## DESCRIPTION  OF  THE  DATASET
+
+The Ames Housing dataset which consists of 79 different explanatory variables. It is enriched with data on almost every aspect of a house. These explanatory housing parameters focus on the quality and quantity of many physical attributes of the property.
+
+```{r}
+library(kableExtra)
+x=data.frame(Predictors=c('Continuous Variable',
+                          'Discret Variable',
+                          'Categorical Variable (Nominal)',
+                          'Categorical Variable(Ordinal)'),
+             Number=c(20,14,23,23))
+x %>% 
+ kable() %>%
+ kable_styling("striped", full_width = F) %>%
+ column_spec(2, width = "20em") %>%
+ row_spec(0, bold = TRUE, font_size = 30) %>%
+ row_spec(1, color = "blue", background = "lightblue", bold = TRUE) %>%
+ row_spec(2, color = "blue", background = "navajowhite", bold = TRUE) %>%
+ row_spec(3, color = "blue", background = "lightsalmon", bold = TRUE)%>%
+ row_spec(4, color = "blue", background = "navajowhite", bold = TRUE)
+```
+
+Total number of observations: 1459
+
+There are certain categorical predictors having too many levels (eg. 'Neighborhood' has 27 levels) as well as predictors having only 2 levels.
+
+
+## DESCRIPTION OF THE DATASET (Continued)
+
+- Quantitative: 1stFlrSF, 2ndFlrSF, 3SsnPorch, BedroomAbvGr, BsmtFinSF1, BsmtFinSF2, BsmtFullBath, BsmtHalfBath, BsmtUnfSF, EnclosedPorch, Fireplaces, FullBath, GarageArea, GarageCars, GarageYrBlt, GrLivArea, HalfBath, KitchenAbvGr, LotArea, LotFrontage, LowQualFinSF, MSSubClass, MasVnrArea, MiscVal, MoSold, OpenPorchSF, OverallCond, OverallQual, PoolArea, ScreenPorch, TotRmsAbvGrd, TotalBsmtSF, WoodDeckSF, YearBuilt, YearRemodAdd, YrSold
+
+- Qualitative: Alley, BldgType, BsmtCond, BsmtExposure, BsmtFinType1, BsmtFinType2, BsmtQual, CentralAir, Condition1, Condition2, Electrical, ExterCond, ExterQual, Exterior1st, Exterior2nd, Fence, FireplaceQu, Foundation, Functional, GarageCond, GarageFinish, GarageQual, GarageType, Heating, HeatingQC, HouseStyle, KitchenQual, LandContour, LandSlope, LotConfig, LotShape, MSZoning, MasVnrType, MiscFeature, Neighborhood, PavedDrive, PoolQC, RoofMatl, RoofStyle, SaleCondition, SaleType, Street, Utilities.
+
+
+
+## DESCRIPTION OF THE DATASET (Continued)
+
+```{r}
+Name = c('SalePrice','MSSubClass','LotArea','Neighborhood','BldgType','OverallQual','YearBuilt','YearRemodAdd','Bedroom','SaleCondition')
+
+Description = c('Selling Price of House','Identifies the type of dwelling involved in the sale','Lot size in square feet','Physical locations within Ames city limits','Type of dwelling','Rates the overall material and finish of the house','Original construction date','Remodel date (same as construction date if no remodeling or additions','Bedrooms above grade (does NOT include basement bedrooms)
+','Condition of sale')
+dataframe = data.frame(Name,Description)
+knitr::kable(dataframe,format='markdown')
+```
+
+
+# Exploratory Data Analysis
+
+
+## Response Variable
+ 
+Here our response is Price ( 'SalePrice').It is a continuous variable and unit is US Dollars.
+
+
+A brief summary of the response is given below:
+
+
+```{r,ggplot2,MASS,reshape2,tidyverse,dplyr,lattice,caret,car,trafo,moments,glmnet,lmtest,fastDummies,DescTools,ppcor,dgof,corpcor,gridExtra,factoextra,caTools,qpcR,error=FALSE,warning=FALSE}
+rm(list=ls())
+
+par(mfrow=c(1,1))
+data = readxl::read_xlsx('C:/Users/Saheli/Desktop/SAHELI/Mstat 2022/Year 1 -Delhi/ISI-Assignments and notes/Deepayan sir/SEM 1 project/project data original.xlsx')
+attach(data)
+data_new=data[,-c(80)]
+
+#Imputing Missing Val
+#----------------------------------------
+data_new$PoolQC[data_new$PoolQC=='NA']= 'None'
+data_new$MiscFeature[data_new$MiscFeature=='NA']= 'None'
+data_new$Alley[data_new$Alley=='NA']= 'None'
+data_new$Fence[data_new$Fence=='NA']= 'None'
+data_new$FireplaceQu[data_new$FireplaceQu=='NA']= 'None'
+data_new$LotFrontage[data_new$LotFrontage=='NA']= 'None'
+
+data_new$LotFrontage= as.numeric(data_new$LotFrontage) 
+c = which(is.na(data_new$LotFrontage)== 'TRUE')
+a = aggregate(data_new$LotFrontage[-c],by=
+                list(data_new$Neighborhood[-c]),median)
+b = data_new$Neighborhood[c]
+d = array(0)
+for(i in 1:length(b))
+{ for(j in 1:nrow(a))
+{
+  if(b[i]==a$Group.1[j]){
+    d[i]= a$x[j]
+  }}}
+
+data_new$LotFrontage[c] = d #missing values replaced by median 
+
+data_new$GarageCond[data_new$GarageCond=='NA']= 'None'
+data_new$GarageQual[data_new$GarageQual=='NA']= 'None'
+data_new$GarageType[data_new$GarageType=='NA']= 'None'
+data_new$GarageArea[is.na(data_new$GarageArea)== TRUE]= 0
+data_new$GarageFinish[data_new$GarageFinish=='NA']= 'None'
+
+data_new$GarageYrBlt = as.numeric(data_new$GarageYrBlt)
+data_new$GarageYrBlt[is.na(data_new$GarageYrBlt)== TRUE]= 0
+data_new$GarageCars = as.numeric(data_new$GarageCars)
+data_new$GarageCars[is.na(data_new$GarageCars)== TRUE]= 0
+data_new$BsmtFinSF1 = as.numeric(data_new$BsmtFinSF1)
+data_new$BsmtFinSF1[is.na(data_new$BsmtFinSF1)== TRUE]= 0
+data_new$BsmtFinSF2 = as.numeric(data_new$BsmtFinSF2)
+data_new$BsmtFinSF2[is.na(data_new$BsmtFinSF2)== TRUE]= 0
+data_new$BsmtUnfSF = as.numeric(data_new$BsmtUnfSF)
+data_new$BsmtUnfSF[is.na(data_new$BsmtUnfSF)== TRUE]= 0
+data_new$TotalBsmtSF = as.numeric(data_new$TotalBsmtSF)
+data_new$TotalBsmtSF[is.na(data_new$TotalBsmtSF)== TRUE]= 0
+data_new$BsmtFullBath = as.numeric(data_new$BsmtFullBath)
+data_new$BsmtFullBath[is.na(data_new$BsmtFullBath)== TRUE]= 0
+data_new$BsmtHalfBath = as.numeric(data_new$BsmtHalfBath)
+data_new$BsmtHalfBath[is.na(data_new$BsmtHalfBath)== TRUE]= 0
+
+data_new$BsmtQual[data_new$BsmtQual=='NA']= 'None'
+data_new$BsmtCond[data_new$BsmtCond=='NA']= 'None'
+data_new$BsmtExposure[data_new$BsmtExposure=='NA']= 'None'
+data_new$BsmtFinType1[data_new$BsmtFinType1=='NA']= 'None'
+data_new$BsmtFinType2[data_new$BsmtFinType2=='NA']= 'None'
+data_new$YearBuilt=as.factor(data_new$YearBuilt)
+
+
+data_new$MasVnrType[data_new$MasVnrType=='NA']= 'BrkFace'
+data_new$MasVnrArea = as.numeric(data_new$MasVnrArea)
+data_new$MasVnrArea[is.na(data_new$MasVnrArea)== TRUE]= 0
+
+data_new$MSZoning[data_new$MSZoning=='NA']= 'RL'
+data_new$Functional[data_new$Functional=='NA']= 'Typ'
+data_new$KitchenQual[data_new$KitchenQual=='NA']= 'TA'
+data_new$Exterior1st[data_new$Exterior1st=='NA']= 'Sdng'
+data_new$Exterior2nd[data_new$Exterior2nd=='NA']= 'VinylSd'
+data_new$SaleType[data_new$SaleType=='NA']= 'WD'
+data_new$MSSubClass[data_new$MSSubClass=='NA']= 60
+data_new$Utilities[data_new$Utilities=='NA']= 'AllPub'
+#feature engineering
+#------------------------------------------------
+data_new$MSSubClass = as.factor(data_new$MSSubClass)
+data_new$OverallCond = as.factor(data_new$OverallCond)
+data_new$OverallQual = as.factor(data_new$OverallQual)
+data_new$YrSold = as.factor(data_new$YrSold)
+data_new$MoSold = as.factor(data_new$MoSold)
+
+
+summary(SalePrice)
+```
+
+
+##
+
+<center>
+```{r}
+library(ggplot2)
+ggplot(data=data_new,aes(x=SalePrice,y=..density..))+
+  geom_histogram(bins=50,fill='green',col='black')+
+  labs(title = 'Histogram of Price of House',x='Price of House (in Dollars)')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))+theme_light()
+```
+
+It is to be noted that distribution of the response is positively skewed.
+<\center>
+
+
+## A Description of some Predicting Features
+
+```{r}
+library(moments)
+factor_var=data_new[sapply(data_new, is.factor)]
+num_var=subset(data_new[sapply(data_new, is.numeric)])
+char_var=data_new[sapply(data_new, is.character)]
+
+
+distribution <- as.data.frame(t(sapply(num_var, quantile)))
+distribution$Mean <- sapply(num_var, mean)
+distribution$SD <- sapply(num_var, sd)
+distribution$skenewss <- sapply(num_var, skewness)
+distribution$kurtosis <- sapply(num_var, kurtosis)
+distribution<-round(distribution, 1)
+knitr::kable(distribution,format='markdown')
+```
+
+
+
+
+
+
+# Relationship Between Price and Other Features
+
+
+
+##
+
+<center>
+```{r}
+
+data_new= subset(data_new, select=-c(YearBuilt,YrSold))
+library(ggplot2)
+ggplot(data=NULL,aes(x=LotArea,y=SalePrice))+
+  geom_point()+
+  labs(title = 'Scatterplot of Sale Price of House \n vs Area of the property(in sqft)',x=
+         'Lot area',y='Sale Price of House(in dollars)')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+```
+
+<\center>
+
+
+##
+ 
+<center>
+```{r}
+library(ggplot2)
+ggplot(data=data_new,aes(x=as.factor(BedroomAbvGr),y=SalePrice
+                     ,fill=BedroomAbvGr))+
+  geom_boxplot()+
+  labs(title = 'Boxplot of Price of House 
+       with respect to number of bedrooms',
+       x='Number of bedrooms',
+       y='Price of House')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+```
+<\center>
+
+
+##
+<center>
+```{r}
+library(ggplot2)
+ggplot(data=data_new,aes(x=Neighborhood,y=SalePrice,fill=Neighborhood))+
+  geom_boxplot()+
+  labs(title = 'Boxplot of Price with respect to the Neighborhood',
+       x='Neighborhood',
+       y='Price of House')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+
+```
+<\center>
+
+
+##
+
+<center>
+```{r}
+library(ggplot2)
+ggplot(data=data_new,aes(x=as.factor(OverallQual),y=SalePrice
+                 ,fill=as.factor(OverallQual)))+
+  geom_boxplot()+
+  labs(title = 'Boxplot of Price of \n House with respect to overall quality of the house',
+       y='Price of House',
+       x='Overall Quality')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+
+```
+<\center>
+
+
+##
+
+<center>
+```{r}
+library(ggplot2)
+ggplot(data=data_new,aes(x=BldgType,y=SalePrice
+                         ,fill=BldgType))+
+  geom_boxplot()+
+  labs(title = 'Boxplot of Price of House \n with respect to Type of Dwelling',
+       y='Price of House',
+       x='Type of Dwelling')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+```
+<\center>
+
+
+
+# Analysis of Houses with respect to Age
+
+
+##
+
+<center>
+Price Trend of Houses Built over Years
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\privce vs year.jpeg')
+
+```
+<\center>
+
+
+##
+<center>
+```{r,warning=FALSE}
+library(gridExtra)
+sold2006=data[data$YrSold==2006,which(colnames(data)=='YearBuilt')]$YearBuilt
+renov2006=data[data$YrSold==2006,which(colnames(data)=='YearRemodAdd')]$YearRemodAdd
+age2006 = 2006 - sold2006
+
+age_2006_group<-ifelse(age2006<10,"0~9",
+                       ifelse(age2006<20,"10~19",
+                              ifelse(age2006<30,"20~29",
+                                     ifelse(age2006<40,"30~39",
+                                            ifelse(age2006<50,"40~49",
+                                                   ifelse(age2006<60,"50~59",
+                                                          ifelse(age2006<70,"60~69",
+                                                                 ifelse(age2006<80,"70~79",
+                                                                        ifelse(age2006<90,"80~89",
+                                                                               
+                                                                               
+                                                                               ifelse(age2006<100,"90~99","more than 100"))))))))))
+
+renov_bi2006= as.factor(ifelse(renov2006>sold2006 & renov2006<2006,'renovated','not renovated'))
+pricesq6=data$SalePrice[data$YrSold==2006]
+g1 = ggplot(NULL,aes(age_2006_group,pricesq6,color=renov_bi2006))+
+  geom_boxplot()+
+  ggtitle("Remodelling effect in the same age group") +
+  theme_classic() +
+  theme(text = element_text(face ="bold"),
+        plot.title = element_text(hjust = 0.5))+ scale_y_continuous(limits = 
+                                                                      c(100000,280000))
+g1
+
+```
+
+##
+
+```{r}
+
+sold2007=data[data$YrSold==2007,which(colnames(data)=='YearBuilt')]$YearBuilt
+renov2007=data[data$YrSold==2007,which(colnames(data)=='YearRemodAdd')]$YearRemodAdd
+age2007 = 2006 - sold2007
+
+age_2007_group<-ifelse(age2007<10,"0~9",
+                       ifelse(age2007<20,"10~19",
+                              ifelse(age2007<30,"20~29",
+                                     ifelse(age2007<40,"30~39",
+                                            ifelse(age2007<50,"40~49",
+                                                   ifelse(age2007<60,"50~59",
+                                                          ifelse(age2007<70,"60~69",
+                                                                 ifelse(age2007<80,"70~79",
+                                                                        ifelse(age2007<90,"80~89",
+                                                                               
+                                                                               
+                                                                               ifelse(age2007<100,"90~99","more than 100"))))))))))
+
+renov_bi2007= as.factor(ifelse(renov2007>sold2007 & renov2007<2007,'renovated','not renovated'))
+pricesq7=data$SalePrice[data$YrSold==2007]
+g2 = ggplot(NULL,aes(age_2007_group,pricesq7,color=renov_bi2007))+
+  geom_boxplot()+
+  ggtitle("Remodelling effect in the same age group") +
+  theme_classic() +
+  theme(text = element_text(face ="bold"),
+        plot.title = element_text(hjust = 0.5))+ scale_y_continuous(limits = 
+                                                                      c(100000,280000))
+g2
+
+```
+
+##
+
+```{r,message=FALSE,warning=FALSE}
+
+sold2008=data[data$YrSold==2008,which(colnames(data)=='YearBuilt')]$YearBuilt
+renov2008=data[data$YrSold==2008,which(colnames(data)=='YearRemodAdd')]$YearRemodAdd
+age2008 = 2008 - sold2008
+
+age_2008_group<-ifelse(age2008<10,"0~9",
+                       ifelse(age2008<20,"10~19",
+                              ifelse(age2008<30,"20~29",
+                                     ifelse(age2008<40,"30~39",
+                                            ifelse(age2008<50,"40~49",
+                                                   ifelse(age2008<60,"50~59",
+                                                          ifelse(age2008<70,"60~69",
+                                                                 ifelse(age2008<80,"70~79",
+                                                                        ifelse(age2008<90,"80~89",
+                                                                               
+                                                                               
+                                                                               ifelse(age2008<100,"90~99","more than 100"))))))))))
+
+renov_bi2008= as.factor(ifelse(renov2008>sold2008 & renov2008<2008,'renovated','not renovated'))
+pricesq8=data$SalePrice[data$YrSold==2008]
+g3 = ggplot(NULL,aes(age_2008_group,pricesq8,color=renov_bi2008))+
+  geom_boxplot()+
+  ggtitle("Remodelling effect in the same age group") +
+  theme_classic() +
+  theme(text = element_text(face ="bold"),
+        plot.title = element_text(hjust = 0.5))+ scale_y_continuous(limits = 
+                                                                      c(100000,280000))
+g3
+
+```
+
+
+##
+
+
+```{r}
+
+sold2009=data[data$YrSold==2009,which(colnames(data)=='YearBuilt')]$YearBuilt
+renov2009=data[data$YrSold==2009,which(colnames(data)=='YearRemodAdd')]$YearRemodAdd
+age2009 = 2009 - sold2009
+
+age_2009_group<-ifelse(age2009<10,"0~9",
+                       ifelse(age2009<20,"10~19",
+                              ifelse(age2009<30,"20~29",
+                                     ifelse(age2009<40,"30~39",
+                                            ifelse(age2009<50,"40~49",
+                                                   ifelse(age2009<60,"50~59",
+                                                          ifelse(age2009<70,"60~69",
+                                                                 ifelse(age2009<80,"70~79",
+                                                                        ifelse(age2009<90,"80~89",
+                                                                               
+                                                                               
+                                                                               ifelse(age2009<100,"90~99","more than 100"))))))))))
+
+renov_bi2009= as.factor(ifelse(renov2009>sold2009 & renov2009<2009,'renovated','not renovated'))
+pricesq9=data$SalePrice[data$YrSold==2009]
+g4 = ggplot(NULL,aes(age_2009_group,pricesq9,color=renov_bi2009))+
+  geom_boxplot()+
+  ggtitle("Remodelling effect in the same age group") +
+  theme_classic() +
+  theme(text = element_text(face ="bold"),
+        plot.title = element_text(hjust = 0.5))+ scale_y_continuous(limits = 
+                                                                      c(100000,280000))
+g4
+
+```
+
+##
+
+```{r}
+
+sold2010=data[data$YrSold==2010,which(colnames(data)=='YearBuilt')]$YearBuilt
+renov2010=data[data$YrSold==2010,which(colnames(data)=='YearRemodAdd')]$YearRemodAdd
+age2010 = 2010 - sold2010
+
+age_2010_group<-ifelse(age2010<10,"0~9",
+                       ifelse(age2010<20,"10~19",
+                              ifelse(age2010<30,"20~29",
+                                     ifelse(age2010<40,"30~39",
+                                            ifelse(age2010<50,"40~49",
+                                                   ifelse(age2010<60,"50~59",
+                                                          ifelse(age2010<70,"60~69",
+                                                                 ifelse(age2010<80,"70~79",
+                                                                        ifelse(age2010<90,"80~89",
+                                                                               
+                                                                               
+                                                                               ifelse(age2010<100,"90~99","more than 100"))))))))))
+
+renov_bi2010= as.factor(ifelse(renov2010>sold2010 & renov2010<2010,'renovated','not renovated'))
+pricesq10=data$SalePrice[data$YrSold==2010]
+g5 = ggplot(NULL,aes(age_2010_group,pricesq10,color=renov_bi2010))+
+  geom_boxplot()+
+  ggtitle("Remodelling effect in the same age group") +
+  theme_classic() +
+  theme(text = element_text(face ="bold"),
+        plot.title = element_text(hjust = 0.5))+ scale_y_continuous(limits = 
+                                                                      c(100000,280000))
+
+g5
+```
+<\center>
+
+
+## Correlation Heatmap
+
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\correlation heatmap.jpeg')
+```
+
+
+
+<\center>
+Note that, price of house is highly correlated with the features named: LotArea, GrLivArea, BedroomAbvGr, TotRoomsAbvGr.
+
+##
+
+
+<center>
+```{r}
+data.2 = subset(data_new,select = c(
+                                    LotArea,TotalBsmtSF,GrLivArea,
+                                    BedroomAbvGr,SalePrice))
+
+pairs(data.2, main='Pair Plot')
+```
+<\center>
+Note that, BedroomAbvGr and GrLivArea are linearly related as increase in above ground area increases total number of bedrooms above ground.
+
+
+# Data Cleaning 
+
+
+## Missing Values Percentage
+
+```{r, message=FALSE,warning=FALSE}
+library(tidyverse)
+data1=readxl::read_xlsx('C:/Users/Saheli/Desktop/SAHELI/Mstat 2022/Year 1 -Delhi/ISI-Assignments and notes/Deepayan sir/SEM 1 project/project data original.xlsx')
+group=missval=array(0)
+for(i in 1:ncol(data1))
+{
+  count = 0
+  for(j in 1:nrow(data1))
+  {
+  if(data1[j,i]=='NA'| is.na(data1[,i]
+                                )[j]== 'TRUE')
+  {
+    count = count+1
+  }
+  }
+  group[i] = colnames(data1)[i]
+  missval[i] = count*100/nrow(data1)
+}
+m= data.frame(group1=factor(group,levels = group),missval)
+miss.val.ratio = ( m %>% arrange(m$missval))
+
+miss.val = miss.val.ratio[-(1:60),]
+ggplot(miss.val[-c(18,19,20),],aes(x=group1,y=missval))+
+  geom_col(fill='brown')+
+  labs(title = 'Missing Value Percentage',
+       x='Housing Parameters',
+       y='Percentage of missing values')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+```
+
+##
+
+The dataset originally contains 79 predictors.
+
+We drop the following columns:
+
+```{r}
+feature1 = c('Id','Yearbuilt','YrSold','YearRemodd','PoolQc')
+desc = c('Identification number of house','Original construction date','Year Sold (YYYY)','Remodel date (same as construction date if no remodeling or additions)
+','Quality of Pool')
+
+d2 = data.frame(Feature=feature1, Description=desc)
+knitr::kable(d2,format='markdown')
+
+
+```
+
+
+We introduce new predicting column: 'Age_Sold_Group', 'renov_bi'
+
+- 'Age_Sold_Group' = 'YrSold'-'YearBuilt'
+- 'renov_bi' can take two values. 1 if the house was renovated or 0 if the house was not renovated.
+
+Then, we create dummy of all the categorical predictors. 
+
+## Treatment of Null Values
+
+```{r}
+Feature = c('LotFrontage','MasVnrType','MsZoning','Functional','Exterior1st','Exterior2nd','Utilities')
+
+Method = c('Null values replaced by Median, grouped within a certain neighborhood',
+           'Null values replaced by mode','Null values replaced by mode',
+           'Null values replaced by mode','Null values replaced by mode',
+           'Null values replaced by mode','Null values replaced by mode')
+
+d1 = data.frame(Feature, Method)
+knitr::kable(d1,format='markdown')
+```
+
+
+
+## LOG TRANSFORMATION OF THE RESPONSE
+
+As we saw that the response is highly positively skewed, we may apply a log transformation over the response.
+
+##
+Histogram of response after log transformation:
+
+```{r}
+
+data_new$SalePrice=log(SalePrice)
+```
+
+
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\logres.jpeg')
+```
+<\center>
+
+
+## SPLITING THE DATASET INTO TRAIN AND TEST SET
+
+We split the dataset into two parts. 80% of the whole data is contained in train set and the remaining 20% is contained in the test set.
+
+
+## Models for Prediction
+
+Here we use Least Square Linear Regression Model.
+
+Response: log('SalePrice')
+
+Since the dataset contains large number of predictors and also since multicollinearity is present in the dataset, it is wise to remove unnecessary predicting features which do not have significant impact on the response.
+
+## MODEL 1: 
+
+Recall that from the correlation heatmap, we noticed price is highly correlated with 'LotArea', 'BedroomAbvGr', 'TotalBsmtSF'.
+
+```{r,message=FALSE,warning=FALSE}
+library(caTools)
+data.1 = data.frame(LotArea,BedroomAbvGr,SalePrice)
+set.seed(1234)
+split = sample.split(data.1$SalePrice, SplitRatio = 0.8)
+price_train.prime = subset(data.1$SalePrice, split == TRUE)
+training_set.prime = cbind(subset(data.1[,-3], split == TRUE),price=log(price_train.prime))
+price_test.prime = subset(data.1$SalePrice, split == FALSE)
+test_set.prime = cbind(subset(data.1[,-3], split == FALSE),price=log(price_test.prime))
+
+summary(lm(price~.,training_set.prime))$coefficients
+
+```
+
+- Multiple R-Squared: 0.9475
+- Residual Standard Error: 0.0204400
+- PRESS:0.4926025
+
+
+##
+
+```{r,message=FALSE,warning=FALSE}
+library(car)
+residualPlot(lm(price~.,training_set.prime),main='Residual Plot')
+```
+
+
+##
+
+```{r,message=FALSE,warning=FALSE}
+qqPlot(resid(lm(price~.,training_set.prime)),main='QQ plot',ylab='residual quantiles')
+```
+
+# Prediction over the Test Dataset
+
+## 
+
+```{r, message=FALSE}
+library(reshape2)
+K1 = data.frame(actual_price =price_test.prime,
+                Fitted_price=exp(predict(lm(price~.,training_set.prime), newdata=test_set.prime)))
+
+meltdatak=melt(K1)
+ggplot(data=meltdatak,aes(value,fill=variable))+
+  geom_density(alpha=.3)+
+  labs(title = 'Density Plot of Actual House Price',
+       x='Actual House Price(in Dollars)')+
+  theme(plot.title =
+          element_text(size=
+                         16,
+                       hjust=.5,face='bold'),
+        plot.subtitle = element_text(
+          size=14,hjust=.5,face='italic'
+        ),
+        legend.title = element_text(hjust=.5),
+        axis.title = element_text(face='bold'),
+        axis.text=element_text(face='bold'))
+
+
+```
+
+
+## Implementing different Variable Selection Method
+
+Here we compare two variable selection method:
+
+- LASSO
+
+- Principle Component Analysis
+
+
+# Variable Selection: LASSO
+
+
+## Choice of Lambda
+
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\lambda.jpeg')
+```
+<\center>
+
+
+## Coefficients vs Fraction Deviance
+
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\fracdev.jpeg')
+```
+<\center>
+
+We see that we need 2 non-zero coefficients in the model is enough  to explain 80% of total variation of response.
+
+
+##
+
+From LASSO, we get the following predicting columns:
+
+```{r, message=FALSE}
+library(fastDummies)
+library(glmnet)
+data_pred_scale = subset(data_new, select= -c(SalePrice))
+
+dum_pred = dummy_cols(data_pred_scale, remove_first_dummy = TRUE)
+
+
+age_sold<-YrSold-YearBuilt
+age_sold_group<-ifelse(age_sold<10,"0~9",
+                       ifelse(age_sold<20,"10~19",
+                              ifelse(age_sold<30,"20~29",
+                                     ifelse(age_sold<40,"30~39",
+                                            ifelse(age_sold<50,"40~49",
+                                                   ifelse(age_sold<60,"50~59",
+                                                          ifelse(age_sold<70,"60~69",
+                                                                 ifelse(age_sold<80,"70~79",
+                                                                        ifelse(age_sold<90,"80~89",
+ 
+                                                                               
+                                                            ifelse(age_sold<100,"90~99","more than 100"))))))))))
+
+dum_pred$agegr = age_sold_group
+dum_pred_data = subset(dum_pred, select=-c(
+  MSSubClass,MSZoning,Street,Alley,LotShape,LandContour,Utilities,LotConfig,
+  LandSlope,Neighborhood,Condition1,Condition2,BldgType,HouseStyle,OverallCond,
+  RoofStyle,RoofMatl,Exterior1st,Exterior2nd,MasVnrType,ExterQual,ExterCond,
+  Foundation,BsmtQual,BsmtCond,BsmtExposure,BsmtFinType1,BsmtFinType2,Heating,
+  HeatingQC,CentralAir,Electrical,KitchenQual,Functional,FireplaceQu,GarageType,
+  GarageFinish,GarageQual,GarageCond,PavedDrive,Fence,MiscFeature,SaleType,
+  SaleCondition,MoSold,agegr,PoolQC
+))
+fit.lasso= cv.glmnet(data.matrix(dum_pred_data), 
+                     data_new$SalePrice,nfolds=10)
+fm.lasso=glmnet(data.matrix(dum_pred_data),data_new$SalePrice , alpha = 1)
+
+rownames(coef(fit.lasso, s = 'lambda.1se'))[coef(fit.lasso, s = 'lambda.1se')[,1]!= 0]
+
+```
+
+## MODEL 2:
+
+We use the predicting columns obtained from LASSO and fit a least square linear model.
+
+We train our model using the training set and obtain the following results:
+
+
+- Multiple R-squared: 0.9585
+- Residual Standard Error: 0.0186
+- PRESS: 2833.417
+
+
+
+# RESIDUAL DIAGNOSTICS
+
+
+## Residual Plot
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\resilasso.jpeg')
+```
+<\center>
+We see that, the residuals are more or less randomly scattered around 0 line.
+
+
+## Q-Q Plot
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\qqlasso.jpeg')
+```
+<\center>
+
+Q-Q plot shows that the distribution of residual is not normally distributed.
+
+
+
+# Prediction over the Test Dataset
+
+
+## Density Plot Of House Price
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\densitylasso.jpeg')
+```
+<\center>
+
+
+## Principle Component Analysis
+
+One way to reduce the number of predictor variables is Principal Component Analysis(PCA). Here, we transform the numerical predictors into  orthogonal set of predicting variables such that the new predicting variables explain 95% of the total variation.
+
+
+Here, through PCA we obtain 21 principal components that explains 95% of the total variation.
+
+
+## Scree Plot
+
+<center>
+
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\screeplot.jpeg')
+
+```
+<\center>
+
+
+
+## Model 3:
+
+We use the 21 principal components and all other categorical features and fit Least Square Linear Model over the response variable. 
+
+We train our model using the training set and obtain the following results:
+
+
+- Multiple R-squared: 0.97210
+- Residual Standard Error: 0.01698
+- PRESS: 0.50811
+
+
+
+# RESIDUAL DIAGNOSTICS
+
+
+## Residual Plot
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\resipca.jpeg')
+```
+<\center>
+
+We see that, the residuals are more or less randomly scattered around 0 line.
+
+
+## Q-Q Plot
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\qqpca.jpeg')
+```
+<\center>
+
+Q-Q plot shows that the distribution of residuals is skewed.
+
+
+# Prediction over the Test Dataset
+
+
+## Density Plot of House Price
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\densitypca.jpeg')
+
+```
+<\center>
+
+
+## A Summary
+
+```{r}
+c1 = c(0.9475,0.02044, 0.4926025,2833.417)
+c2 = c(0.9585,0.0186,0.4374293,2665.283)
+c3 = c(0.9721,0.01698,0.5081105,3004.976)
+Measures = c('R-Squared','Residual Standard Error','PRESS','MAE')
+
+d3=data.frame(Measures,Model_1=c1,Model_2=c2,Model_3=c3)
+knitr::kable(d3,format='markdown')
+
+```
+
+So, we can say that predictors chosen by LASSO gives a better fit to the response variable.
+
+
+## 
+
+<center>
+```{r}
+knitr::include_graphics('C:\\Users\\Saheli\\Desktop\\SAHELI\\Mstat 2022\\Year 1 -Delhi\\ISI-Assignments and notes\\Deepayan sir\\SEM 1 project\\thankyou.jpg')
+
+```
+<\center>
