@@ -1,0 +1,480 @@
+---
+title: "Assignment"
+subtitle: "Statistical Computing I"
+author: 
+      - "Name : Saheli Datta"
+      - "Roll No : MD2213"
+date: "2023-11-18"
+toc: true
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+The catastrophic explosion of the Space Shuttle Challenger occurred 73 seconds after liftoff on January 28th, 1986. Tragically, all seven astronauts, including Christa McAuliffe, lost their lives in this disaster. The primary concern leading up to the Challenger's launch was centered around the potential failure of the large O-rings, which sealed various sections of the booster rockets, particularly in colder temperatures.
+
+This analysis primarily focuses on utilizing data from previous launches to explore the correlation between O-ring failures and various influencing factors such as ambient temperature and pressure in the surrounding environment. The aim is to investigate how these covariates relate to the occurrence of O-ring failures, aiming to discern patterns or associations that could inform the understanding of risks associated with such launches.
+
+# Exploratory Data Analysis
+In order to work with the provided data and its analysis, we need to store the data in a data frame.
+```{r,message=FALSE,warning=FALSE}
+rm(list=ls())
+set.seed(123)
+library(alr4)
+library(ggplot2)
+library(glmnet)
+```
+
+The data looks like the following:
+```{r,message=FALSE,warning=FALSE}
+temperature = c(53,57,58,63,66,67,67,67,68,69,70,70,70,70,72,73,75,75,76,76,78,79,81)
+failure = c(1,1,1,1,0,0,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,0)
+flight_num = c(14,9,23,10,1,5,13,15,4,3,8,17,2,11,6,7,16,21,19,22,12,20,18)
+data = data.frame(flight_num,temperature,failure=as.factor(failure))
+head(data)
+```
+
+We need to normalize the given data.
+```{r,message=FALSE,warning=FALSE}
+scaled = function(x)
+{
+return((x-mean(x))/sd(x))
+}
+data$temperature = scaled(temperature)
+```
+
+Now, let us plot the temparatures against response (failure):
+```{r,warning=FALSE,message=FALSE}
+ggplot(data, aes(y=temperature, x=failure)) +
+geom_jitter(aes(colour=failure),width = 0.1)+
+  ggtitle("Scatterplot of Failure vs Temperature") 
+```
+When observing the plot of the variable Failure against Temperature, a distinct negative relationship becomes evident. This relationship suggests that as the temperature increases, there is a noticeable decrease in the occurrences of the value '1', likely indicating a reduced chance of failure. In simpler terms, higher temperatures seem to be associated with fewer instances of failure, showcasing a clear negative dependence between temperature and the likelihood of failure.
+
+# Logistic Regression Model
+In starting the analysis, we will apply a logistic model where 'Y' serves as the response variable (Failure), while 'x1' as the covariate (Temperature). As this is a frequentist model, no prior information is initially incorporated for the parameters; instead, the Maximum Likelihood Estimation (MLE) technique is utilized to compute the parameter estimates using the 'glm' package in R.
+
+```{r,warning=FALSE,message=FALSE}
+model_glm = glm(formula = data$failure ~ data$temperature,family = "binomial",data = data)
+summary(model_glm)
+```
+The summary output of the model distinctly indicates that the 'temperature' variable holds statistical significance at the 5% level. This confirmation aligns with our initial suspicion regarding the influence of temperature. These estimated values will serve as our starting approximations in the subsequent implementations of Markov Chain Monte Carlo (MCMC) methods.
+
+Now, let us visualize the fitted logistic model:
+```{r,warning=FALSE,message=FALSE}
+ggplot( NULL, aes(x=temperature, y=failure)) +
+geom_point() +geom_smooth(method = "glm",
+method.args = list(family = "binomial")) +
+labs(title = "Failure Probability",x = "Tempareture",y = "Failure")
+```
+\newpage
+
+# Bayesian Logistic Model - 1
+Moving from the frequentist approach to the Bayesian perspective, we define the logistic model. This model describes the probability that a certain outcome \(Y_i\) equals 1, given the value of \(x_i\). It's formulated using the exponential function and a set of parameters (\(\beta_0\) and \(\beta_1\)) that influence this probability based on the observed \(x_i\) values. This transition to a Bayesian framework involves a shift in how we view and estimate these parameters, considering prior information and updating our beliefs based on observed data using Bayesian inference techniques.
+
+$$P(Y_i = 1 \,|\, x_i) = \frac{e^{\beta_0 + \beta_1 x_i}}{1 + e^{\beta_0 + \beta_1 x_i}} = \pi(x_i), \quad i = 1, 2, \ldots, n$$
+where $\(x\)$ represents the normalized variable, specifically the temperature during the launch, and $\(Y\)$ signifies the indicator variable denoting whether any of the O-rings failed or not.
+
+We choose to center and scale the variable $\(x\)$ primarily due to computational considerations associated with the logit link function. This normalization facilitates computations and model convergence. However, it's important to note that we can readily obtain coefficients in terms of the original variable by reversing this normalization.
+
+The likelihood function of $\beta$ given the observed data y, X can be written as :
+
+$$\begin{aligned} f\left(y_i \mid \boldsymbol{\beta}, x_i\right) & =\pi_i^{y_i}\left(1-\pi_i\right)^{1-y_i} \\ & =\left[\frac{e^{\beta_0+\beta_1 x_{ i}}}{1+e^{\beta_0+\beta_1 x_{i}}}\right]^{y_i}\left[\frac{1}{1+e^{\beta_0+\beta_1 x_{ i}}}\right]^{1-y_i}\end{aligned}$$
+
+now, if we assume diffused normal prior for $\beta \sim N_{2}(0,\lambda^{-1}I_{2})$ for small value of $\lambda$ as we don’t consider any specific information to be imparted in the prior :
+
+$$\pi(\beta) \propto -\frac{\lambda}{2}\beta^{T}\beta$$
+
+Hence, the posterior of $\beta$ can be written as :
+
+$$\pi(\beta\mid x,y) \propto \pi(\beta) f(y \mid \beta,x)$$
+
+$$\pi(\beta\mid x,y) \propto exp(-\frac{\lambda}{2} \beta^{T}\beta) \prod_{i=1}^{n} \left[ \frac{e^{y_{i}\beta^{T}x_{i}}}{1+e^{y_{i}\beta^{T}x_{i}}} \right] (=\tilde p(\beta))$$
+
+Now, in order to draw samples from this posterior distribution of $\beta$, we use the following MCMC algorithm.
+
+- We have to draw samples from the posterior distribution of $\beta$ which can be written as $p(\beta) = \frac{\tilde p(\beta)}{Z_{p}}$
+where, $Z_{p}$ denotes the intractible normalizing constant and $\tilde p(\beta)$ denotes the part that
+is easily computable.
+
+-  Now, we select our proposal distribution as $q(\beta\mid\beta^{(\tau)})$
+where $\beta^{(\tau)}$
+is the current iterate of $\beta$.
+
+$$q(\beta\mid\beta^{(\tau)}\sim N_{2}(\beta^{(\tau)},\Sigma)$$
+
+which is a bivariate normal density with mean $\beta^{(\tau)}$
+and variance covariance matrix $\Sigma$. We take $\Sigma$ = diag ($\sigma_{1},\sigma_{2}$) where $\sigma_{i}$ are chosen in such a manner that the target distribution is neither explored too slowly such that it gets stuck in a mode even if the posterior is multimodal, nor too large that the acceptance probability becomes too low.
+
+- Finally, in an iteration $\tau$, where current value is $\beta^{(\tau)}$, we select a new value $\beta^{*}$ if $u<A(\beta^{*},\beta^{(\tau)})$, where 
+
+  - $u\sim U(0,1)$ is an unifrom random sample.
+
+  - $A(\beta^{*},\beta^{(\tau)})$ is the acceptance probability defined as $A(\beta^{*},\beta^{(\tau)}) = min (1, \frac{\tilde p(\beta^{*})}{\tilde p(\beta^{(\tau)})})$
+
+  - then we set $\beta^{(\tau+1)} = \beta^{*}$ and proceed.
+  
+- Otherwise also we set $\beta^{(\tau+1)} = \beta^{(\tau)}$
+and draw samples from proposal distribution $q(\beta\mid\beta^{(\tau +1)})$.
+
+We draw B = $5 \times 10^{4}$ many samples from the posterior distribution using MCMC algorithm devised above and burn the first 10% samples also use a thinning gap of 5 to avoid significant correlations between the observations. Here are the relevant R codes for the analysis :
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+likelihood1 <- function(X,y,beta,lambda = 0.01,M = 100)
+{
+  beta = matrix(beta,nrow = 1)
+  a = exp(-(lambda/2)*beta%*%t(beta))
+  b = exp(y*(beta%*%t(X)))
+  c = exp(beta%*%t(X))
+  return(M*a*prod(b/(1+c)))
+}
+
+MCMC.Sampler1 <- function(X,y,beta0,B,sg = c(1,1),showprogress = TRUE)
+{
+  X = cbind(rep(1,length(X)),X)
+  beta0 = matrix(beta0,nrow = 1)
+  post.sample = c(0,0)
+  beta1 = beta0
+  prog = txtProgressBar(max = B,style = 3)
+  beta2=array(0)
+  for(i in 1:B)
+  {
+    beta2[1] = beta1[1] + rnorm(1,0,sg[1])
+    beta2[2] = beta1[2] + rnorm(1,0,sg[2])
+    ratio = likelihood1(X,y,beta = beta2)/likelihood1(X,y,beta1)
+    unif = runif(1)
+    if(unif <= min(1,ratio)) beta1=beta2
+    post.sample = rbind(post.sample,beta1)
+    if(showprogress) setTxtProgressBar(pb = prog,value = i)
+  }
+  close(prog)
+  return(post.sample)
+}
+```
+
+Using this manual function we draw the stated number of posterior samples and make inference from them.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# MCMC parameters
+B = 10^5
+n.thin = 5
+
+# Running the MCMC sampler
+Post.Sample1 = MCMC.Sampler1(X = data$temperature,y = failure,beta0 =
+                               c(model_glm$coefficients[1],model_glm$coefficients[2]),B,
+                             sg = c(3,3),showprogress = FALSE)
+Post.Sample1 = (Post.Sample1)[-(1:(B/10)),]
+n.length = nrow(Post.Sample1)
+batch.size = floor(n.length/n.thin)
+Post.Sample1 = Post.Sample1[n.thin*(1:batch.size),]
+Post.Samp1 = data.frame(Post.Sample1)
+names(Post.Samp1) <- c('b0','b1')
+```
+
+Now, using the generated posterior samples, we plot the posterior densities of $\beta$ individually.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# Posterior distributions of beta0,beta1
+ggplot(data = Post.Samp1,aes(x=b0)) +
+geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+labs(title = bquote("Density Plot of" ~ beta[0]),x = bquote(beta[0]))
+
+ggplot(data = Post.Samp1,aes(x=b1)) +
+geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+labs(title = bquote("Density Plot of" ~ beta[1]),x = bquote(beta[1]))
+```
+
+The posterior means for the three parameters are :
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+m1 = apply(Post.Samp1, 2, mean)
+m2 = model_glm$coefficients
+data.frame("Posterior.Means" = m1,"Logistic.Coef" = m2)
+```
+
+\newpage
+
+To know whether these estimates are more or less consistent or not (ergodicity) we plot the cumulative means of these posterior samples.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# plotting the mean cumulatively w.r.t sample size
+b0.mean.cum <- cumsum(Post.Samp1$b0)/(1:nrow(Post.Samp1))
+b1.mean.cum <- cumsum(Post.Samp1$b1)/(1:nrow(Post.Samp1))
+```
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# plot of means with increasing sample size
+plot(b0.mean.cum,type = "l",main = bquote("posterior mean of " ~ beta[0]),
+xlab = "sample size",ylab = "mean")
+```
+
+\newpage
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+plot(b1.mean.cum,type = "l",main = bquote("posterior mean of " ~ beta[1]),
+xlab = "sample size",ylab = "mean")
+```
+
+With increasing sample size, we can see that the mean more or less gets stabilized indicating their consistency.
+
+Here’s another plot which may provide better idea through bivariate density plots taking two variables at a time where the density is shown using varying colour density.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# b0,b1
+ggplot(Post.Samp1, aes(x = b0, y = b1, fill = ..level..)) +
+stat_density_2d(geom = "polygon") +
+labs(title = bquote("Joint Density of" ~ beta[0] ~ "&" ~ beta[1]),
+x = bquote(beta[0]), y = bquote(beta[1]))
+```
+
+
+The most important thing to visualize is how we can model the posterior probability distribution of that $\pi(y\mid X) = P(Y=1\mid X)=\frac{e^{\beta_{0}+\beta_{1}x}}{1+e^{\beta_{0}+\beta_{1}x}}$. We use the sampled posterior values of $\beta$ to plot the approximate distribution of $\pi(y|X)$ for some fixed value of x. To see how the failure probability depends on x we take different values and then plot them.
+
+# Bayesian Model 2
+
+As another “different” model we propose a similar model where, we choose the “probit” link function instead of “logit” link. Then we can write the probability of failure as :
+
+$$P(Y_{i}=1 \mid x_{i}) = \Phi (\beta_{0}+\beta_{1}x_{i}) = \pi_{i} , i=1,2,.....n$$
+
+The likelihood function of $\boldsymbol{\beta}$ given the observed data $\boldsymbol{y}, \boldsymbol{X}$ can be written as :
+
+$$\begin{aligned}
+f(\boldsymbol{y} \mid \boldsymbol{\beta}, \boldsymbol{X}) & =\prod_{i=1}^n f\left(y_i \mid \boldsymbol{\beta}, x_i\right) \\
+& =\prod_{i=1}^n \pi_i^{y_i}\left(1-\pi_i\right)^{1-y_i} \\
+& =\prod_{i=1}^n\left\{\Phi\left(\beta_0+\beta_1 x_{1 i}\right)\right\}^{y_i}\left\{1-\Phi\left(\beta_0+\beta_1 x_{1 i}\right)\right\}^{1-y_i}
+\end{aligned}$$
+
+where, $\boldsymbol{\beta}=\left(\begin{array}{c}\beta_0 \\ \beta_1\end{array}\right) \sim N_2\left(\mathbf{0}, \lambda^{-1} \boldsymbol{I}_2\right)$.
+Hence, the posterior of $\beta$ can be written as :
+
+$$\begin{aligned}
+\pi(\boldsymbol{\beta} \mid \boldsymbol{x}, \boldsymbol{y}) & \propto \pi(\boldsymbol{\beta}) f(\boldsymbol{y} \mid \boldsymbol{\beta}, \boldsymbol{x}) \\
+& \propto \exp \left(-\frac{\lambda}{2} \boldsymbol{\beta}^T \boldsymbol{\beta}\right) \prod_{i=1}^n\left\{\Phi\left(\beta_0+\beta_1 x_{1 i}\right)\right\}^{y_i}\left\{1-\Phi\left(\beta_0+\beta_1 x_{1 i}\right)\right\}^{1-y_i} \\
+& \propto \exp \left(-\frac{\lambda}{2} \boldsymbol{\beta}^T \boldsymbol{\beta}\right) \prod_{i=1}^n\left\{\Phi\left(\beta_0+\beta_1 x_{1 i}\right)\right\}^{y_i}\left\{1-\Phi\left(\beta_0+\beta_1 x_{1 i}\right)\right\}^{1-y_i}(=\widetilde{p}(\boldsymbol{\beta}))
+\end{aligned}$$
+
+and here too we do similar analysis and plot the results one by one :Here is the MCMC sampler (Using MH algorithm) that we have written manually :
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+likelihood2.1 <- function(X,y,beta,lambda = 0.01,M = 100)
+{
+  beta = matrix(beta,nrow = 1)
+  a = exp(-(lambda/2)*beta%*%t(beta))
+  b = pnorm(q = beta%*%t(X))
+  c = (b^y)*((1-b)^(1-y))
+  return(M*a*prod(c))
+}
+MCMC.Sampler2.1 <- function(X,y,beta0,B,sg = c(1,1),
+showprogress = TRUE,lambda = 0.01)
+{
+  X = cbind(rep(1,length(X)),X)
+  beta0 = matrix(beta0,nrow = 1)
+  post.sample = c(0,0)
+  beta1 = beta0
+  beta2 = matrix(c(0,0),nrow = 1)
+  prog = txtProgressBar(max = B,style = 3)
+  for(i in 1:B)
+  {
+    beta2[1] = beta1[1] + rnorm(1,0,sg[1])
+    beta2[2] = beta1[2] + rnorm(1,0,sg[2])
+    ratio = likelihood2.1(X,y,beta = beta2,lambda = lambda)/
+                      likelihood2.1(X,y,beta1,lambda = lambda)
+    unif = runif(1)
+    if(unif <= min(1,ratio)) beta1=beta2
+    post.sample = rbind(post.sample,beta1)
+    if(showprogress) setTxtProgressBar(pb = prog,value = i)
+  }
+  close(prog)
+  return(post.sample)
+}
+```
+
+Then we draw samples and make all the similar plots.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# MCMC parameters
+B = 10^5
+n.thin = 5
+
+# Running the MCMC sampler
+Post.Sample2.1 = MCMC.Sampler2.1(X = data$temperature,y = failure,
+beta0 = c(model_glm$coefficients[1],model_glm$coefficients[2]),
+B,sg = c(3,3),showprogress = FALSE,lambda=0.001)
+Post.Sample2.1 = (Post.Sample2.1)[-(1:(B/10)),]
+n.length = nrow(Post.Sample2.1)
+batch.size = floor(n.length/n.thin)
+Post.Sample2.1 = Post.Sample2.1[n.thin*(1:batch.size),]
+Post.Samp2.1 = data.frame(Post.Sample2.1)
+names(Post.Samp2.1) <- c('b0','b1')
+```
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# Posterior distributions of beta0,beta1
+ggplot(data = Post.Samp2.1,aes(x=b0)) +
+geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+labs(title = bquote("Density Plot of" ~ beta[0]),x = bquote(beta[0]))
+```
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+ggplot(data = Post.Samp2.1,aes(x=b1)) +
+geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) +
+labs(title = bquote("Density Plot of" ~ beta[1]),x = bquote(beta[1]))
+```
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# plotting the mean cumulatively w.r.t sample size
+b0.mean.cum <- cumsum(Post.Samp1$b0)/(1:nrow(Post.Samp1))
+b1.mean.cum <- cumsum(Post.Samp1$b1)/(1:nrow(Post.Samp1))
+```
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+plot(b0.mean.cum,type = "l",xlab="sample size",ylab="mean",
+     main = bquote("posterior mean of " ~ beta[0]))
+```
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+plot(b1.mean.cum,type = "l",xlab="sample size",ylab="mean",
+     main = bquote("posterior mean of " ~ beta[1]))
+```
+
+We can see that posterior means are consistent.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# b0,b1
+ggplot(Post.Samp2.1, aes(x = b0, y = b1, fill = ..level..)) +
+stat_density_2d(geom = "polygon") +
+labs(title = bquote("Joint Density of" ~ beta[0] ~ "&" ~ beta[1]),
+x = bquote(beta[0]), y = bquote(beta[1]))
+```
+
+# Model Comparison
+
+## Using Naive Monte Carlo :
+
+Finally we compare between these two bayesian models one with logistic link and one with probit link function. We can use bayes factor to compare between them. Here, our hypothesis are :
+
+$M_{0}$ :The model involving logit link is as good as that involving the probit link.
+
+$M_{1}$ :These two models are not same but one is better than the other.
+
+we use the bayes factor here also defined as :
+
+$$BF_{10} = \frac{m_{1}(X,y)}{m_{0}(X,y)}$$
+
+where, $m_{i}(X,y) = \int f_{i}(y \mid \beta,x) \pi_{i}(\beta) d\beta$ for i=1,2.We use naive monte carlo method to calculate the values of the integrals through a numerical method using samples drawn from prior distribution.
+
+Here is the code for the computation and we obtain the approx value of bayes factor.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# Comparison using Bayes Factor
+m2.1 <- function(X,y,lambda = 0.0001,N = 10^3,null = TRUE,Fac = 10^3,param = 1)
+{
+  beta = c()
+  Total = 0
+  X = cbind(rep(1,length(X)),X)
+  for(i in 1:N)
+  {
+    beta[1] = rnorm(1,0,sd = 1/lambda)
+    beta[2] = rnorm(1,0,sd = 1/lambda)
+
+    beta = matrix(beta,byrow = TRUE,nrow = 1)
+    b = exp(y*(beta%*%t(X)))
+    c = exp(beta%*%t(X))
+    M = Fac*prod(b/(1+c))
+    Total = M + Total
+  }
+  return(Total/N)
+}
+
+
+
+# New model
+m2.2 <- function(X,y,lambda = 0.0001,N = 10^3,null = TRUE,Fac = 10^3,param = 1)
+{
+  beta = c()
+  Total = 0
+  X = cbind(rep(1,length(X)),X)
+  for(i in 1:N)
+  {
+    beta[1] = rnorm(1,0,sd = 1/lambda)
+    beta[2] = rnorm(1,0,sd = 1/lambda)
+
+    b = pnorm(q = beta%*%t(X))
+    c = (b^y)*((1-b)^(1-y))
+    M = Fac*prod(c)
+    Total = M + Total
+  }
+  return(Total/N)
+}
+
+set.seed(2207)
+a = m2.1(X = data$temperature,y = failure,N = 10^4,
+lambda = 0.1,null = TRUE,param = 3)
+a
+set.seed(2207)
+b = m2.2(X = data$temperature,y = failure,N = 10^4,
+lambda = 0.1,null = TRUE,param = 3)
+b
+
+BF10 = b/a
+log(BF10)
+```
+
+As can be seen the value is small hence, we have no evidence whatsoever to reject the alternative hypothesis hence, we accept $H_{0}$ here.
+
+## Using Harmonic Mean Estimator
+
+Secondly, we use the harmonic estimator which utilizes the posterior samples generated using MCMC to calculate the marginal likelihoods. We define it as :
+
+$$\widetilde{Z}_{\mathcal{M}}=\left[\frac{1}{N} \sum_{i=1}^N \frac{1}{f\left(\boldsymbol{X}, \boldsymbol{y} \mid \boldsymbol{\beta}^{(i)}, \mathcal{M}\right)}\right]_{\boldsymbol{\beta}^{(i)} \sim \pi(\boldsymbol{\beta} \mid \boldsymbol{X}, \boldsymbol{y})}^{-1}$$
+
+Using this we calculate $\widetilde{Z}_{\mathcal{M}_1}$ and $\widetilde{Z}_{\mathcal{M}_0}$ and calculate their ratio to evaluate approximate value
+of $B F_{10}$ as :
+
+$$\widetilde{\mathrm{BF}}_{10}=\frac{\widetilde{Z}_{\mathcal{M}_1}}{\widetilde{Z}_{\mathcal{M}_0}}$$
+
+which came around 1.312 and as this value is not very much significant in favour of $H_1$ so we accept $H_0$ and conclude that both the models are more or less equivalent.
+
+```{r,include=TRUE,warning=FALSE,message=FALSE}
+# Using harmonic estimator
+# Logistic Model
+N = nrow(Post.Samp1)
+Total = 0
+X = cbind(rep(1,nrow(data)),data$temperature)
+y = data$failure
+M1 = NULL
+for(i in 1:N)
+{
+  beta = Post.Samp1[i,]
+  beta = as.matrix(beta)
+  b = exp(y*(beta%*%t(X)))
+  c = exp(beta%*%t(X))
+  M1[i] = prod(b/(1+c))
+}
+Est1 = 1/mean(1/M1)
+
+# Probit Model
+N = nrow(Post.Samp2.1)
+Total = 0
+X = cbind(rep(1,nrow(data)),data$temperature)
+y = data$failure
+M2 = NULL
+i = 1
+for(i in 1:N)
+{
+beta = Post.Samp2.1[i,]
+beta = as.matrix(beta)
+b = pnorm(q = beta%*%t(X))
+c = (b^y)*((1-b)^(1-y))
+M2[i] = prod(c)
+}
+Est2 = 1/mean(1/M2)
+
+## Estimated Value of Bayes Factor(10)
+Est1/Est2
+```
+
+here also, we can clearly see the approximate value is quite close to 1 which signifies the same as before.
+
