@@ -1,11 +1,11 @@
-# 📊 Coursework Projects – MSTAT Program
+# Coursework Projects – MSTAT Program
 
 This repository contains reports and projects completed as part of the **MSTAT course**.  
 Each course folder contains `.Rmd` files (and sometimes knitted outputs in `.html` or `.pdf`) along with supporting datasets/plots.
 
 ---
 
-## 📂 Course Projects
+## Course Projects
 
 - **Regression Techniques** (Prof. Deepayan Sarkar, Sem 1)  
   Linear regression, logistic regression, model diagnostics.
@@ -30,6 +30,6 @@ Each course folder contains `.Rmd` files (and sometimes knitted outputs in `.htm
 
 ---
 
-## 🚀 How to Explore
+## How to Explore
 - Navigate into each course folder for project reports (`.Rmd`) and outputs.  
 - Run `.Rmd` files in RStudio to reproduce the analysis.  
