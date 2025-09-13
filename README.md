@@ -28,8 +28,4 @@ Each course folder contains `.Rmd` files (and sometimes knitted outputs in `.htm
 - **High Dimensional Inference** (Prof. Debashish Paul, Sem 4)  
   Sparsity, penalized regression (LASSO/Ridge), multiple testing.
 
----
-
-## How to Explore
-- Navigate into each course folder for project reports (`.Rmd`) and outputs.  
-- Run `.Rmd` files in RStudio to reproduce the analysis.  
+--- 
